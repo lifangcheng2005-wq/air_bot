@@ -137,4 +137,14 @@ def dialogflow_webhook():
         
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"使用者目前的提問是：{user_message if
+            contents=f"使用者目前的提問是：{user_message if user_message else target_city}",
+            config=ai_config,
+        )
+        
+        ai_reply_text = response.text if response.text else "抱歉，我現在無法生成回應，請稍後再試。"
+        
+    except Exception as e:
+        # 終極抓漏：就算 Gemini 臨時塞車，也直接回傳爬到的文字，絕對不拋出錯誤顯示 Not Available！
+        ai_reply_text = f"🤖 報時氣象台（AI 臨時塞車，改由後端直接播報即時數據）：\n\n{live_government_info}"
+
+    return jsonify({"fulfillmentText": ai_reply_text})
