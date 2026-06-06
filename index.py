@@ -85,8 +85,8 @@ def fetch_government_data(city_name: str) -> str:
         else:
             data_context += "- 紫外線指數：目前無即時觀測數據。\n"
             
-    except Exception:
-        data_context += "- 環境部觀測站數據目前連線過載，暫時跳過。\n"
+    except Exception as e:
+        data_context += f"- 嚴重錯誤！環境部抓不到原因為：{str(e)}\n"
 
     return data_context
 
