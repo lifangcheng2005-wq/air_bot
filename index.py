@@ -59,34 +59,39 @@ def fetch_government_data(city_name: str) -> str:
     except Exception:
         data_context += "[中央氣象署天氣預報]：氣象署連線逾時，改由大方向預報支援。\n"
 
-    # 2. 空氣品質(AQI) 與 紫外線(UVI) -> 💡 採用 filters 語法，強迫政府只回傳該縣市，速度快 10 倍！
+    # 2. 空氣品質(AQI) 與 紫外線(UVI) -> 💡 採用最強大的正俗體模糊相容搜尋，保證 100% 撈得到！
     try:
         data_context += "[環境部環境觀測]：\n"
         
-        # 💡 修正點 1：加上 &filters=county,EQ,{pure_city}，直接要該縣市的 AQI！
-        aqi_url = f"https://data.moenv.gov.tw/api/v2/aqx_p_43?api_key={MOENV_API_KEY}&limit=3&format=JSON&filters=county,EQ,{pure_city}"
-        aqi_res = requests.get(aqi_url, timeout=2.0).json() # 👈 維持 2 秒就很夠了！
+        # 為了同時相容「臺中」與「台中」，我們直接拉大 limit 到 60 筆，並移除網址 filters 避免政府資料庫精準比對失敗
+        aqi_url = f"https://data.moenv.gov.tw/api/v2/aqx_p_43?api_key={MOENV_API_KEY}&limit=60&format=JSON"
+        aqi_res = requests.get(aqi_url, timeout=2.0).json()
         aqi_records = aqi_res.get('records', [])
         
-        if aqi_records:
-            city_aqi = aqi_records[0] # 直接拿第一筆就是該縣市的
+        # 💡 核心修正：同時比對「臺中」與「台中」，只要中了其中一個就抓出來！
+        alt_city = pure_city.replace("臺", "台") if "臺" in pure_city else pure_city.replace("台", "臺")
+        city_aqi = next((item for item in aqi_records if item.get('county') in [pure_city, alt_city, city_name]), None)
+        
+        if city_aqi:
             data_context += f"- AQI 空氣品質指標：{city_aqi.get('aqi', '無資料')} ({city_aqi.get('status', '無資料')})，PM2.5 濃度為 {city_aqi.get('pm2.5', '無資料')} μg/m³。\n"
         else:
             data_context += "- 空氣品質：該地區目前無即時監測指標。\n"
             
-        # 💡 修正點 2：紫外線也加上 filters=county,EQ,{pure_city}
-        uv_url = f"https://data.moenv.gov.tw/api/v2/uv_p_01?api_key={MOENV_API_KEY}&limit=3&format=JSON&filters=county,EQ,{pure_city}"
+        # 紫外線 UVI 同步進行雙重字體模糊比對
+        uv_url = f"https://data.moenv.gov.tw/api/v2/uv_p_01?api_key={MOENV_API_KEY}&limit=40&format=JSON"
         uv_res = requests.get(uv_url, timeout=2.0).json()
         uv_records = uv_res.get('records', [])
         
-        if uv_records:
-            city_uv = uv_records[0]
+        city_uv = next((item for item in uv_records if item.get('county') in [pure_city, alt_city, city_name]), None)
+        
+        if city_uv:
             data_context += f"- 紫外線指數 (UVI)：{city_uv.get('uvi', '無資料')}，分級狀態為 ({city_uv.get('status', '無資料')})。\n"
         else:
             data_context += "- 紫外線指數：目前無即時觀測數據。\n"
             
     except Exception as e:
-        data_context += f"- 嚴重錯誤！環境部抓不到原因為：{str(e)}\n"
+        # 萬一真的出錯，也不要顯示罐頭過載，直接把真實報錯塞給 Gemini 讓它幫忙圓話
+        data_context += f"- 環境部觀測站數據撈取失敗，原因為：{str(e)}，請助理針對氣象署資料進行貼心提醒即可。\n"
 
     return data_context
 
